@@ -221,8 +221,14 @@ class ClientThread(threading.Thread):
                     self.tcp_server.send_unity_error(error_msg)
                     self.tcp_server.logerr(error_msg)
         except IOError as e:
-            self.tcp_server.logerr("Exception: {}".format(e))
+            # EOF is the normal shutdown path when a Unity scene unloads or the player exits.
+            # Report it as lifecycle information rather than a transport failure.
+            self.tcp_server.loginfo("Connection closed: {}".format(e))
         finally:
             halt_event.set()
             self.conn.close()
+            # A TcpServer registration graph belongs to its Unity socket. Keeping those
+            # nodes after a scene reload leaves stale callbacks and duplicate rosout node
+            # names when the replacement client registers the same topics.
+            self.tcp_server.clear_registrations()
             self.tcp_server.loginfo("Disconnected from {}".format(self.incoming_ip))

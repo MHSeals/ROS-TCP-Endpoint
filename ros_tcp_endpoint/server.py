@@ -168,9 +168,27 @@ class TcpServer(Node):
 
     def unregister_node(self, old_node):
         if old_node is not None:
-            old_node.unregister()
             if self.executor is not None:
                 self.executor.remove_node(old_node)
+            # A node must leave the executor before its entities and rosout publisher are
+            # destroyed. Destroying it while an executor thread still owns it can race an
+            # immediate reconnect and leave the node name registered with rosout.
+            old_node.unregister()
+
+    def clear_registrations(self):
+        """Remove the ROS graph owned by a disconnected Unity client."""
+        tables = (
+            self.publishers_table,
+            self.subscribers_table,
+            self.ros_services_table,
+            self.unity_services_table,
+        )
+        for table in tables:
+            for ros_node in list(table.values()):
+                self.unregister_node(ros_node)
+            table.clear()
+        self.pending_srv_id = None
+        self.pending_srv_is_request = False
 
     def destroy_nodes(self):
         """
