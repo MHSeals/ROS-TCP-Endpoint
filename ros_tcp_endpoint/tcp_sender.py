@@ -190,6 +190,12 @@ class UnityTcpSender:
 
                 try:
                     conn.sendall(item)
+                except (BrokenPipeError, ConnectionResetError) as e:
+                    # The reader owns connection lifetime. Unity can close after its final
+                    # message while this sender is draining a queued ROS callback; that is a
+                    # normal disconnect race, not evidence of payload loss during the run.
+                    self.tcp_server.loginfo("Connection closed while sending: {}".format(e))
+                    break
                 except Exception as e:
                     self.tcp_server.logerr("Exception {}".format(e))
                     break
