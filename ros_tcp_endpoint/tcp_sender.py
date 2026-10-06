@@ -17,6 +17,7 @@ import socket
 import time
 import threading
 import json
+import errno
 
 from rclpy.node import Node
 from rclpy.serialization import deserialize_message
@@ -195,6 +196,15 @@ class UnityTcpSender:
                     # message while this sender is draining a queued ROS callback; that is a
                     # normal disconnect race, not evidence of payload loss during the run.
                     self.tcp_server.loginfo("Connection closed while sending: {}".format(e))
+                    break
+                except OSError as e:
+                    # ClientThread publishes halt before closing the reader-owned
+                    # socket. A send already in flight can then observe EBADF.
+                    # An active socket failure, or any other errno, stays an error.
+                    if e.errno == errno.EBADF and halt_event.is_set():
+                        self.tcp_server.loginfo("Connection closed while sending: {}".format(e))
+                    else:
+                        self.tcp_server.logerr("Exception {}".format(e))
                     break
                 except Exception as e:
                     self.tcp_server.logerr("Exception {}".format(e))
